@@ -34,6 +34,10 @@ const auditLogSchema = new mongoose.Schema({
       'task_assigned',
       'task_completed',
       'task_status_changed',
+      'proof_submitted',
+      'proof_approved',
+      'proof_rejected',
+      'ai_breakdown_requested',
       
       // Event actions
       'event_created',
@@ -54,7 +58,7 @@ const auditLogSchema = new mongoose.Schema({
   },
   entityType: {
     type: String,
-    enum: ['User', 'Club', 'Task', 'Event', 'Notification', 'System'],
+    enum: ['User', 'Club', 'Task', 'Event', 'Notification', 'ProofSubmission', 'AiTaskBreakdownJob', 'System'],
     required: true
   },
   entityId: {

@@ -18,27 +18,36 @@ const createActivity = async ({
   requestId: req.requestId
 });
 
-const listTaskActivities = ({ taskId, limit = 30, before }) => {
-  const query = { task: taskId };
-  if (before) query.createdAt = { $lt: new Date(before) };
+const buildCursorQuery = (before) => {
+  if (!before) return {};
+  const [createdAt, id] = String(before).split('_');
+  const timestamp = new Date(createdAt);
+  if (Number.isNaN(timestamp.getTime())) return {};
+  if (!id) return { createdAt: { $lt: timestamp } };
+  return { $or: [{ createdAt: { $lt: timestamp } }, { createdAt: timestamp, _id: { $lt: id } }] };
+};
 
-  return Activity.find(query)
-    .populate('actor', 'name email profilePhoto')
-    .sort({ createdAt: -1 })
-    .limit(Math.min(Number(limit) || 30, 100))
+const listActivities = async ({ query, limit = 30, before, populateTask = false }) => {
+  const pageSize = Math.min(Math.max(Number(limit) || 30, 1), 100);
+  const activityQuery = Activity.find({ ...query, ...buildCursorQuery(before) })
+    .populate('actor', 'name email profilePhoto');
+  if (populateTask) activityQuery.populate('task', 'title status priority');
+  const activities = await activityQuery
+    .sort({ createdAt: -1, _id: -1 })
+    .limit(pageSize + 1)
     .lean();
+  const hasMore = activities.length > pageSize;
+  const data = hasMore ? activities.slice(0, pageSize) : activities;
+  const last = data[data.length - 1];
+  return { data, pageInfo: { hasMore, nextCursor: hasMore && last ? `${last.createdAt.toISOString()}_${last._id}` : null } };
+};
+
+const listTaskActivities = ({ taskId, limit = 30, before }) => {
+  return listActivities({ query: { task: taskId }, limit, before });
 };
 
 const listClubActivities = ({ clubId, limit = 30, before }) => {
-  const query = { club: clubId };
-  if (before) query.createdAt = { $lt: new Date(before) };
-
-  return Activity.find(query)
-    .populate('actor', 'name email profilePhoto')
-    .populate('task', 'title status priority')
-    .sort({ createdAt: -1 })
-    .limit(Math.min(Number(limit) || 30, 100))
-    .lean();
+  return listActivities({ query: { club: clubId }, limit, before, populateTask: true });
 };
 
 module.exports = {

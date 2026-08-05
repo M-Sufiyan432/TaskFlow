@@ -10,6 +10,7 @@ const processDeadLetterJob = require('./processors/deadLetter.processor');
 const processScheduledJob = require('./processors/scheduled.processor');
 const processTaskJob = require('./processors/task.processor');
 const processAttachmentJob = require('./processors/attachmentScan.processor');
+const processAiJob = require('./processors/ai.processor');
 const { captureException } = require('../config/sentry');
 const { runWithLogContext } = require('../config/logger');
 const { CORRELATION_FIELD, runJobWithTrace } = require('./tracing');
@@ -117,6 +118,7 @@ const startWorkers = () => {
   createWorker(QUEUE_NAMES.AUDIT, processAuditJob, Number(process.env.AUDIT_WORKER_CONCURRENCY || 20));
   createWorker(QUEUE_NAMES.TASKS, processTaskJob, Number(process.env.TASK_WORKER_CONCURRENCY || 3));
   createWorker(QUEUE_NAMES.ATTACHMENTS, processAttachmentJob, Number(process.env.ATTACHMENT_SCAN_WORKER_CONCURRENCY || 2));
+  createWorker(QUEUE_NAMES.AI, processAiJob, Number(process.env.AI_WORKER_CONCURRENCY || 2));
   createWorker(QUEUE_NAMES.MAINTENANCE, processScheduledJob, Number(process.env.MAINTENANCE_WORKER_CONCURRENCY || 2));
   createWorker(QUEUE_NAMES.DEAD_LETTER, processDeadLetterJob, Number(process.env.DEAD_LETTER_WORKER_CONCURRENCY || 2));
 

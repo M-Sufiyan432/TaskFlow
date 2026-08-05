@@ -37,6 +37,9 @@ const notificationRoutes = require('./routes/notification.routes');
 const analyticsRoutes = require('./routes/analytics.routes');
 const adminRoutes = require('./routes/admin.routes');
 const activityRoutes = require('./routes/activity.routes');
+const proofRoutes = require('./routes/proof.routes');
+const aiBreakdownRoutes = require('./routes/aiBreakdown.routes');
+const transcriptExtractionRoutes = require('./routes/transcriptExtraction.routes');
 const { protect } = require('./middleware/auth');
 const { getAllTasks } = require('./controllers/task.controller');
 const { getDashboardData } = require('./controllers/analytics.controller');
@@ -156,6 +159,9 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/activity', activityRoutes);
+app.use('/api', proofRoutes);
+app.use('/api/ai', aiBreakdownRoutes);
+app.use('/api/ai', transcriptExtractionRoutes);
 
 // 404 Handler
 app.use((req, res) => {

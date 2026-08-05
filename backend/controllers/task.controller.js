@@ -6,6 +6,7 @@ const cloudinary = require('../config/cloudinary');
 const { logger } = require('../config/logger');
 const { enqueueAttachmentScan, isQueueEnabled, scheduleTaskReminders } = require('../jobs');
 const { createActivity } = require('../services/activity.service');
+const { invalidateClub, invalidateDashboard } = require('../services/cache.service');
 const { PERMISSIONS, can } = require('../services/permission.service');
 const {
   assertTaskAttachmentKey,
@@ -118,6 +119,28 @@ const enqueueAttachmentScanSafely = async ({ taskId, attachmentId, storageKey })
   } catch (error) {
     logger.error(`Attachment scan enqueue error: ${error.message}`);
   }
+};
+
+const parseCursor = (cursor) => {
+  if (!cursor) return null;
+  const [date, id] = String(cursor).split('_');
+  const createdAt = new Date(date);
+  if (!id || Number.isNaN(createdAt.getTime())) return null;
+  return { createdAt, id };
+};
+
+const applyCreatedAtCursor = (query, cursor, direction = 'desc') => {
+  const parsed = parseCursor(cursor);
+  if (!parsed) return;
+  const comparator = direction === 'asc' ? '$gt' : '$lt';
+  query.$and = [...(query.$and || []), {
+    $or: [{ createdAt: { [comparator]: parsed.createdAt } }, { createdAt: parsed.createdAt, _id: { [comparator]: parsed.id } }]
+  }];
+};
+
+const invalidateTaskCaches = async (task) => {
+  await invalidateClub(task.club);
+  await invalidateDashboard([task.createdBy, ...(task.assignedTo || [])]);
 };
 
 const recordTaskActivity = async (req, task, type, summary, metadata = {}, changes) => {
@@ -251,6 +274,7 @@ exports.getAllTasks = async (req, res) => {
       club,
       tags,
       search,
+      cursor,
       sortBy = 'createdAt',
       sortOrder = 'desc'
     } = req.query;
@@ -308,33 +332,44 @@ exports.getAllTasks = async (req, res) => {
     if (club && hasGlobalAccess) query.club = club;
     if (tags) query.tags = { $in: toArray(tags) };
     if (search) {
-      query.$or = [
+      query.$and = [...(query.$and || []), {
+        $or: [
         { title: { $regex: search, $options: 'i' } },
         { description: { $regex: search, $options: 'i' } }
-      ];
+        ]
+      }];
     }
 
     const sort = {};
     sort[sortBy] = sortOrder === 'desc' ? -1 : 1;
 
-    const tasks = await Task.find(query)
+    const pageSize = Math.min(Math.max(Number(limit) || 20, 1), 100);
+    const cursorSort = sortBy === 'createdAt';
+    const countQuery = { ...query };
+    if (query.$and) countQuery.$and = [...query.$and];
+    if (cursorSort) applyCreatedAtCursor(query, cursor, sortOrder);
+    const taskQuery = Task.find(query)
+      .select('title description club createdBy assignedTo status priority dueDate tags completedAt completedBy estimatedHours actualHours createdAt updatedAt position isArchived')
       .populate('club', 'name logo')
       .populate('createdBy', 'name email profilePhoto')
       .populate('assignedTo', 'name email profilePhoto')
-      .sort(sort)
-      .limit(limit * 1)
-      .skip((page - 1) * limit)
+      .sort(cursorSort ? { createdAt: sortOrder === 'desc' ? -1 : 1, _id: sortOrder === 'desc' ? -1 : 1 } : sort)
+      .limit(cursorSort ? pageSize + 1 : pageSize)
       .lean();
-
-    const count = await Task.countDocuments(query);
+    if (!cursorSort) taskQuery.skip((Number(page) - 1) * pageSize);
+    const [foundTasks, count] = await Promise.all([taskQuery, Task.countDocuments(countQuery)]);
+    const hasMore = cursorSort && foundTasks.length > pageSize;
+    const tasks = hasMore ? foundTasks.slice(0, pageSize) : foundTasks;
+    const last = tasks[tasks.length - 1];
 
     res.status(200).json({
       success: true,
       data: tasks,
       tasks,
-      totalPages: Math.ceil(count / limit),
+      totalPages: Math.ceil(count / pageSize),
       currentPage: parseInt(page),
-      total: count
+      total: count,
+      pageInfo: { hasMore, nextCursor: hasMore && last ? `${last.createdAt.toISOString()}_${last._id}` : null }
     });
   } catch (error) {
     logger.error(`Get All Tasks Error: ${error.message}`);
@@ -357,6 +392,7 @@ exports.getTasksByClub = async (req, res) => {
       priority,
       tags,
       search,
+      cursor,
       sortBy = 'position',
       sortOrder = 'asc'
     } = req.query;
@@ -404,17 +440,24 @@ exports.getTasksByClub = async (req, res) => {
 
     const sort = {};
     sort[sortBy] = sortOrder === 'desc' ? -1 : 1;
+    const pageSize = Math.min(Math.max(Number(limit) || 20, 1), 100);
+    const cursorSort = sortBy === 'createdAt';
+    const countQuery = { ...query };
+    if (query.$and) countQuery.$and = [...query.$and];
+    if (cursorSort) applyCreatedAtCursor(query, cursor, sortOrder);
 
-    const tasks = await Task.find(query)
+    const taskQuery = Task.find(query)
       .select('title description club createdBy assignedTo status priority dueDate tags attachments isRecurring recurrence dependencies subtasks completedAt completedBy estimatedHours actualHours createdAt updatedAt position isArchived')
       .populate('createdBy', 'name email profilePhoto')
       .populate('assignedTo', 'name email profilePhoto')
-      .sort(sort)
-      .limit(Number(limit))
-      .skip((Number(page) - 1) * Number(limit))
+      .sort(cursorSort ? { createdAt: sortOrder === 'desc' ? -1 : 1, _id: sortOrder === 'desc' ? -1 : 1 } : sort)
+      .limit(cursorSort ? pageSize + 1 : pageSize)
       .lean();
-
-    const count = await Task.countDocuments(query);
+    if (!cursorSort) taskQuery.skip((Number(page) - 1) * pageSize);
+    const [foundTasks, count] = await Promise.all([taskQuery, Task.countDocuments(countQuery)]);
+    const hasMore = cursorSort && foundTasks.length > pageSize;
+    const tasks = hasMore ? foundTasks.slice(0, pageSize) : foundTasks;
+    const last = tasks[tasks.length - 1];
 
     // Group by status for Kanban view
     const grouped = {
@@ -429,9 +472,10 @@ exports.getTasksByClub = async (req, res) => {
       data: tasks,
       tasks,
       grouped,
-      totalPages: Math.ceil(count / Number(limit)),
+      totalPages: Math.ceil(count / pageSize),
       currentPage: Number(page),
-      total: count
+      total: count,
+      pageInfo: { hasMore, nextCursor: hasMore && last ? `${last.createdAt.toISOString()}_${last._id}` : null }
     });
   } catch (error) {
     logger.error(`Get Club Tasks Error: ${error.message}`);
@@ -593,6 +637,7 @@ exports.createTask = async (req, res) => {
     }
 
     await scheduleTaskRemindersSafely(task);
+    await invalidateTaskCaches(task);
 
     res.status(201).json({
       success: true,
@@ -731,21 +776,10 @@ exports.updateTask = async (req, res) => {
       }
     });
 
-    await recordTaskActivity(
-      req,
-      task,
-      'task.status_changed',
-      `Changed status from ${oldStatus} to ${normalizedStatus}`,
-      {},
-      {
-        before: { status: oldStatus },
-        after: { status: normalizedStatus }
-      }
-    );
-
     if (changes.dueDate) {
       await scheduleTaskRemindersSafely(task);
     }
+    await invalidateTaskCaches(task);
 
     res.status(200).json({
       success: true,
@@ -815,14 +849,7 @@ exports.deleteTask = async (req, res) => {
       }
     });
 
-    await recordTaskActivity(
-      req,
-      task,
-      'task.assigned',
-      `Assigned ${userIds.length} user${userIds.length === 1 ? '' : 's'} to "${task.title}"`,
-      { assigneeIds: userIds },
-      { after: { assignedTo: userIds } }
-    );
+    await invalidateTaskCaches(task);
 
     res.status(200).json({
       success: true,
@@ -927,17 +954,16 @@ exports.updateTaskStatus = async (req, res) => {
     await recordTaskActivity(
       req,
       task,
-      'task.comment_added',
-      `Added a comment to "${task.title}"`,
-      {
-        commentId: comment._id,
-        mentionIds: mentions || []
-      }
+      'task.status_changed',
+      `Changed status from ${oldStatus} to ${normalizedStatus}`,
+      {},
+      { before: { status: oldStatus }, after: { status: normalizedStatus } }
     );
 
     if (normalizedStatus !== 'completed') {
       await scheduleTaskRemindersSafely(task);
     }
+    await invalidateTaskCaches(task);
 
     res.status(200).json({
       success: true,
@@ -1026,17 +1052,14 @@ exports.assignTask = async (req, res) => {
     await recordTaskActivity(
       req,
       task,
-      'task.attachment_uploaded',
-      `Uploaded attachment "${req.file.originalname}"`,
-      {
-        filename: req.file.originalname,
-        fileType: req.file.mimetype,
-        fileSize: req.file.size,
-        storageProvider: 'cloudinary'
-      }
+      'task.assigned',
+      `Assigned ${userIds.length} user${userIds.length === 1 ? '' : 's'} to "${task.title}"`,
+      { assigneeIds: userIds },
+      { after: { assignedTo: task.assignedTo } }
     );
 
     await scheduleTaskRemindersSafely(task);
+    await invalidateTaskCaches(task);
 
     res.status(200).json({
       success: true,
@@ -1067,7 +1090,7 @@ exports.addComment = async (req, res) => {
       });
     }
 
-    if (!(await requireTaskPermission(req, res, task, 'attachmentUpload'))) return;
+    if (!(await requireTaskPermission(req, res, task, 'comment'))) return;
 
     const comment = await task.addComment(
       req.user._id,
@@ -1118,6 +1141,14 @@ exports.addComment = async (req, res) => {
         additionalInfo: { taskId: task._id, commentId: comment._id }
       }
     });
+
+    await recordTaskActivity(
+      req,
+      task,
+      'task.comment_added',
+      `Added a comment to "${task.title}"`,
+      { commentId: comment._id, mentionIds: mentions || [] }
+    );
 
     res.status(201).json({
       success: true,
@@ -1202,6 +1233,14 @@ exports.uploadTaskAttachment = async (req, res) => {
         }
       }
     });
+
+    await recordTaskActivity(
+      req,
+      task,
+      'task.attachment_uploaded',
+      `Uploaded attachment "${req.file.originalname}"`,
+      { filename: req.file.originalname, fileType: req.file.mimetype, fileSize: req.file.size, storageProvider: 'cloudinary' }
+    );
 
     res.status(201).json({
       success: true,

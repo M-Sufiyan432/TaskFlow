@@ -19,6 +19,10 @@ const retryProfiles = {
     attempts: Number(process.env.ATTACHMENT_SCAN_JOB_ATTEMPTS || 3),
     backoff: { type: 'exponential', delay: 120000 }
   },
+  ai: {
+    attempts: Number(process.env.AI_JOB_ATTEMPTS || 3),
+    backoff: { type: 'exponential', delay: 30000 }
+  },
   deadLetter: {
     attempts: 3,
     backoff: { type: 'exponential', delay: 10000 }

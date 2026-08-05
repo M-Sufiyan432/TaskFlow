@@ -3,10 +3,15 @@ const mongoose = require('mongoose');
 const { logger } = require('../config/logger');
 
 const isValidObjectId = (id) => mongoose.Types.ObjectId.isValid(id);
+const parseCursor = (cursor) => {
+  if (!cursor) return null;
+  const [date, id] = String(cursor).split('_'); const createdAt = new Date(date);
+  return id && !Number.isNaN(createdAt.getTime()) ? { createdAt, id } : null;
+};
 
 exports.getNotifications = async (req, res) => {
   try {
-    const { page = 1, limit = 20, isRead, type } = req.query;
+    const { page = 1, limit = 20, isRead, type, cursor } = req.query;
     const query = { recipient: req.user._id };
     
     if (isRead !== undefined) {
@@ -16,20 +21,31 @@ exports.getNotifications = async (req, res) => {
       query.type = type;
     }
 
-    const notifications = await Notification.find(query)
+    const pageSize = Math.min(Math.max(Number(limit) || 20, 1), 100);
+    const countQuery = { ...query };
+    const cursorMode = cursor !== undefined;
+    const parsedCursor = parseCursor(cursor);
+    if (parsedCursor) query.$or = [
+      { createdAt: { $lt: parsedCursor.createdAt } },
+      { createdAt: parsedCursor.createdAt, _id: { $lt: parsedCursor.id } }
+    ];
+    const notificationQuery = Notification.find(query)
       .populate('sender', 'name profilePhoto')
-      .sort({ createdAt: -1 })
-      .limit(limit * 1)
-      .skip((page - 1) * limit);
-
-    const count = await Notification.countDocuments(query);
+      .sort({ createdAt: -1, _id: -1 })
+      .limit(cursorMode ? pageSize + 1 : pageSize);
+    if (!cursorMode) notificationQuery.skip((Number(page) - 1) * pageSize);
+    const [foundNotifications, count] = await Promise.all([notificationQuery.lean(), Notification.countDocuments(countQuery)]);
+    const hasMore = cursorMode && foundNotifications.length > pageSize;
+    const notifications = hasMore ? foundNotifications.slice(0, pageSize) : foundNotifications;
+    const last = notifications[notifications.length - 1];
 
     res.status(200).json({
       success: true,
       data: notifications,
-      totalPages: Math.ceil(count / limit),
+      totalPages: Math.ceil(count / pageSize),
       currentPage: page,
-      total: count
+      total: count,
+      pageInfo: { hasMore, nextCursor: hasMore && last ? `${last.createdAt.toISOString()}_${last._id}` : null }
     });
   } catch (error) {
     logger.error(`Get Notifications Error: ${error.message}`);

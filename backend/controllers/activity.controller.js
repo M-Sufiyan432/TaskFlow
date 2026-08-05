@@ -22,7 +22,7 @@ exports.getTaskTimeline = async (req, res) => {
       });
     }
 
-    const activities = await listTaskActivities({
+    const result = await listTaskActivities({
       taskId: task._id,
       limit: req.query.limit,
       before: req.query.before
@@ -30,8 +30,9 @@ exports.getTaskTimeline = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      data: activities,
-      activities
+      data: result.data,
+      activities: result.data,
+      pageInfo: result.pageInfo
     });
   } catch (error) {
     logger.error(`Get Task Timeline Error: ${error.message}`);
@@ -60,7 +61,7 @@ exports.getClubTimeline = async (req, res) => {
       });
     }
 
-    const activities = await listClubActivities({
+    const result = await listClubActivities({
       clubId: club._id,
       limit: req.query.limit,
       before: req.query.before
@@ -68,8 +69,9 @@ exports.getClubTimeline = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      data: activities,
-      activities
+      data: result.data,
+      activities: result.data,
+      pageInfo: result.pageInfo
     });
   } catch (error) {
     logger.error(`Get Club Timeline Error: ${error.message}`);

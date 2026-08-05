@@ -10,6 +10,8 @@ const JOB_NAMES = {
   TASK_RECURRING_GENERATE: 'task.recurring.generate',
   ATTACHMENT_SCAN: 'attachment.scan',
   ATTACHMENT_SCAN_CLEANUP: 'attachment.scan.cleanup',
+  AI_TASK_BREAKDOWN: 'ai.task.breakdown',
+  AI_TRANSCRIPT_EXTRACTION: 'ai.transcript.extraction',
   EVENT_REMINDER_SCAN: 'event.scan.reminders',
   NOTIFICATION_CLEANUP: 'notification.cleanup.old',
   AUDIT_LOG_CLEANUP: 'audit.cleanup.old',

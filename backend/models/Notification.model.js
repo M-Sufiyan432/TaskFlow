@@ -78,6 +78,8 @@ const notificationSchema = new mongoose.Schema({
 // Indexes
 notificationSchema.index({ recipient: 1, isRead: 1 });
 notificationSchema.index({ recipient: 1, createdAt: -1 });
+notificationSchema.index({ recipient: 1, isRead: 1, createdAt: -1, _id: -1 });
+notificationSchema.index({ recipient: 1, type: 1, createdAt: -1, _id: -1 });
 notificationSchema.index({ type: 1 });
 notificationSchema.index({ createdAt: -1 });
 

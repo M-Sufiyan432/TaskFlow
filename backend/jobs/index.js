@@ -3,6 +3,7 @@ const { closeRedisConnection } = require('../config/redis');
 const { enqueueEmail } = require('./producers/email.producer');
 const { enqueueNotification, enqueueNotifications } = require('./producers/notification.producer');
 const { enqueueAuditLog } = require('./producers/audit.producer');
+const { enqueueAiTaskBreakdown, enqueueTranscriptExtraction } = require('./producers/ai.producer');
 const {
   enqueueAttachmentScan,
   enqueueAttachmentScanCleanup
@@ -22,6 +23,8 @@ module.exports = {
   closeQueues,
   closeRedisConnection,
   enqueueAuditLog,
+  enqueueAiTaskBreakdown,
+  enqueueTranscriptExtraction,
   enqueueAttachmentScan,
   enqueueAttachmentScanCleanup,
   enqueueEmail,

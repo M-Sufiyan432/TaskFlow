@@ -1,0 +1,28 @@
+name: Production rollback
+
+on:
+  workflow_dispatch:
+    inputs:
+      release:
+        description: Previously healthy immutable release identifier
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  rollback:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Activate prior release
+        env:
+          ROLLBACK_WEBHOOK_URL: ${{ secrets.ROLLBACK_WEBHOOK_URL }}
+          RELEASE: ${{ inputs.release }}
+        run: |
+          test -n "$ROLLBACK_WEBHOOK_URL"
+          curl --fail --show-error --silent --retry 3 --retry-all-errors \
+            -X POST "$ROLLBACK_WEBHOOK_URL" \
+            -H 'Content-Type: application/json' \
+            --data "{\"release\":\"$RELEASE\"}"

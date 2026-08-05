@@ -4,6 +4,7 @@ const Task = require('../models/Task.model');
 const Event = require('../models/Event.model');
 const AuditLog = require('../models/AuditLog.model');
 const { logger } = require('../config/logger');
+const { invalidateClub } = require('../services/cache.service');
 
 // @desc    Get all clubs
 // @route   GET /api/clubs
@@ -179,6 +180,7 @@ exports.updateClub = async (req, res) => {
     if (coverImage) club.coverImage = coverImage;
 
     await club.save();
+    await invalidateClub(club._id);
 
     // Log audit
     await AuditLog.logAction({
@@ -228,6 +230,7 @@ exports.deleteClub = async (req, res) => {
     // Soft delete
     club.isActive = false;
     await club.save();
+    await invalidateClub(club._id);
 
     // Remove club from all members
     await User.updateMany(

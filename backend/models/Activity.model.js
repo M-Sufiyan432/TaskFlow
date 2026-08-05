@@ -27,7 +27,12 @@ const activitySchema = new mongoose.Schema({
       'task.assigned',
       'task.status_changed',
       'task.comment_added',
-      'task.attachment_uploaded'
+      'task.attachment_uploaded',
+      'proof.submitted',
+      'proof.approved',
+      'proof.rejected',
+      'ai.breakdown_requested',
+      'ai.breakdown_ready'
     ],
     index: true
   },
@@ -49,8 +54,8 @@ const activitySchema = new mongoose.Schema({
   timestamps: true
 });
 
-activitySchema.index({ task: 1, createdAt: -1 });
-activitySchema.index({ club: 1, createdAt: -1 });
+activitySchema.index({ task: 1, createdAt: -1, _id: -1 });
+activitySchema.index({ club: 1, createdAt: -1, _id: -1 });
 activitySchema.index({ actor: 1, createdAt: -1 });
 
 module.exports = mongoose.model('Activity', activitySchema);

@@ -9,7 +9,10 @@
     "worker": "node jobs/workers/index.js",
     "worker:dev": "nodemon jobs/workers/index.js",
     "seed": "node scripts/seedData.js",
-    "test": "jest --watchAll --verbose"
+    "test": "jest --runInBand",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --runInBand --coverage",
+    "lint": "node scripts/lint.js"
   },
   "keywords": [
     "task-management",

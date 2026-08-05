@@ -23,6 +23,8 @@ const {
 } = require('../controllers/task.controller');
 const { createTaskValidation } = require('../middleware/validation');
 const { requireTaskCreatePermission } = require('../middlewares/taskPermissions');
+const { cacheResponse } = require('../middlewares/cache');
+const { keys } = require('../services/cache.service');
 
 router.get('/', optionalAuth, getAllClubs);
 router.post('/', protect, createClubValidation, validate, createClub);
@@ -31,7 +33,7 @@ router.post('/:clubId/tasks', protect, (req, _res, next) => {
   req.body.club = req.params.clubId;
   next();
 }, requireTaskCreatePermission, createTaskValidation, validate, createTask);
-router.get('/:clubId', optionalAuth, getClubById);
+router.get('/:clubId', optionalAuth, cacheResponse({ key: (req) => keys.club(req.params.clubId), ttlSeconds: 120 }), getClubById);
 router.put('/:clubId', protect, requireClubAdmin, updateClubValidation, validate, updateClub);
 router.delete('/:clubId', protect, requireClubPresident, deleteClub);
 router.post('/:clubId/join', protect, joinClub);

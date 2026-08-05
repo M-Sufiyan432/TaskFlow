@@ -241,6 +241,11 @@ taskSchema.index({ tags: 1 });
 taskSchema.index({ isArchived: 1 });
 taskSchema.index({ createdAt: -1 });
 taskSchema.index({ club: 1, position: 1 });
+taskSchema.index({ club: 1, isArchived: 1, status: 1, createdAt: -1, _id: -1 });
+taskSchema.index({ club: 1, isArchived: 1, position: 1, _id: 1 });
+taskSchema.index({ club: 1, isArchived: 1, dueDate: 1, _id: 1 });
+taskSchema.index({ assignedTo: 1, isArchived: 1, dueDate: 1, _id: 1 });
+taskSchema.index({ club: 1, isArchived: 1, priority: 1, createdAt: -1, _id: -1 });
 taskSchema.index({
   isRecurring: 1,
   isArchived: 1,
